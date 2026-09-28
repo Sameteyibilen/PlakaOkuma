@@ -1,19 +1,19 @@
 @echo off
 chcp 65001 >nul
-cd /d D:\PlakaOkuma
+cd /d "%~dp0"
 title Plaka Okuma - Kurulum
 
-set TEMP=D:\PlakaOkuma\.tmp
-set TMP=D:\PlakaOkuma\.tmp
-set PIP_CACHE_DIR=D:\PlakaOkuma\.pip-cache
-set EASYOCR_MODULE_PATH=D:\PlakaOkuma\.EasyOCR
-set HF_HOME=D:\PlakaOkuma\.hf
+set TEMP=%~dp0.tmp
+set TMP=%~dp0.tmp
+set PIP_CACHE_DIR=%~dp0.pip-cache
+set EASYOCR_MODULE_PATH=%~dp0.EasyOCR
+set HF_HOME=%~dp0.hf
 
 if not exist "%TEMP%" mkdir "%TEMP%"
 if not exist "%PIP_CACHE_DIR%" mkdir "%PIP_CACHE_DIR%"
 if not exist "%EASYOCR_MODULE_PATH%" mkdir "%EASYOCR_MODULE_PATH%"
 
-echo === D:\PlakaOkuma kurulum ===
+echo === %~dp0 kurulum ===
 where python >nul 2>&1
 if errorlevel 1 (
   echo Python bulunamadi.
