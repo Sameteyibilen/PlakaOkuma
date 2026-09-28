@@ -1,0 +1,8 @@
+pyodbc>=5.1
+opencv-python>=4.8
+numpy>=1.24
+rapidocr-onnxruntime>=1.4
+onnxruntime>=1.17
+fast-alpr[onnx]>=0.4
+fast-plate-ocr[onnx]>=1.1
+open-image-models>=0.5
