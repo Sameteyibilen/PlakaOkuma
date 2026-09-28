@@ -1,49 +1,28 @@
 # Plaka Okuma — Akıllı Kantar
 
-## Operatör ekranı · v1.3
-- Referans tasarıma uygun yuvarlatılmış paneller, üst menü ve büyük tartım tipografisi.
-- Plaka, tartım ve irsaliye için gerçek verilere bağlı üç aşamalı durum göstergesi.
-- Raporlar menüsünden tüm kayıtların özeti ve CSV dışa aktarma.
-- Kamera önizlemelerinin JPEG kaydı düzeltildi; canlı kareler ana ekranda görünür.
-- İki kamera önizlemesi, büyük plaka ve anlık tartım göstergesi.
-- Sağ panelde geçiş kontrolü, kantar bağlantısı ve e-irsaliye eşleştirme.
-- Tam genişlikte araç kayıtları, filtreler ve yatay kaydırma.
-- **Sistem günlüğü** düğmesi son okumaları ve günlükleri ayrı pencerede açar.
-- **Elle irsaliye gir** düğmesi manuel eşleştirme penceresini açar.
-- Sistem duruyorsa veya kantar bağlantısı doğrulanmamışsa geçiş hazır gösterilmez.
-- En küçük pencere boyutu 1280×900; önerilen ekran 1920×1080 (%100 ölçek).
+Tesis tartım operatörü için masaüstü uygulama. Kamera, kantar ve e-irsaliye
+bağlantıları yerel yapılandırmada tutulur; adres ve hesap bilgileri bu dosyada yoktur.
 
-Başlatma dosyaları kendi klasörünü kullanır; proje belirli bir sürücüye bağlı değildir.
-Python 3.12 ile kurulup doğrulanmıştır. İlk kurulum için `KUR.bat` çalıştırın.
+## Operatör ekranı
+- Yuvarlatılmış paneller, üst menü ve büyük tartım tipografisi
+- Plaka, tartım ve irsaliye için üç aşamalı durum göstergesi
+- Raporlar menüsünden kayıt özeti ve CSV dışa aktarma
+- İki kamera önizlemesi, büyük plaka ve anlık tartım
+- Geçiş kontrolü, kantar bağlantısı ve e-irsaliye eşleştirme
+- Araç kayıtları, filtreler ve sistem günlüğü
+
+Başlatma dosyaları kendi klasörünü kullanır. Python 3.12. İlk kurulum: `KUR.bat`.
 
 ### Doğrulama
 `python -m unittest test_scale_auto test_visits test_occupancy test_ocr_deadline test_irsaliye_plates test_ui test_watch_preview`
 
-Önceki sürümden güncellerken `KUR.bat` ile yeni CustomTkinter bağımlılığını yükleyin,
-ardından uygulamayı yeniden açın. Örnek araçlar veya sahte kamera görüntüleri canlı arayüze eklenmez.
-
-Ekran testleri Tk ve açık masaüstü gerektirir. Gerçek kamera, kantar ve e-irsaliye
-entegrasyonları tesis ağı ve ilgili yerel yapılandırmalar ile ayrıca doğrulanmalıdır.
+Önceki sürümden güncellerken `KUR.bat` ile bağımlılıkları yükleyin, ardından uygulamayı
+yeniden açın. Kamera, kantar ve e-irsaliye bağlantıları tesis ağı ve yerel ayarlarla
+doğrulanır.
 
 ## Başlatma
-1. Masaüstü kısayolu **Plaka Okuma** veya `CALISTIR.bat` / `UYGULAMA.bat` — pencere açılır, **Başlat**
-2. Kamera izleme (tarayıcı yok): `IZLE.bat` — çıkış: Q
-3. Kamera testi: `TEST_KAMERA.bat`
-4. Yeniden kurulum: `KUR.bat`
-5. Eski konsol modu: `python live_plate_ocr.py`
-
-## Kameralar
-| Rol | IP | İzleme | OCR |
-|---|---|---|---|
-| Giriş ön | 172.16.21.152 | Dahua alt yayın `subtype=1` | ana `subtype=0` (sadece araç varken) |
-| Giriş arka | 172.16.21.153 | aynı | aynı |
-| Çıkış ön | 172.16.21.164 | Neutron `/media/video1` kısa oturum | aynı, kare alıp kapatır |
-| Çıkış arka | 172.16.21.165 | aynı | aynı |
-
-Kullanıcı: `admin` / `admin`
-
-## Çıktılar
-- Anlık kareler: `live_ocr\`
-- Rapor: `live_ocr\live_report.json`
+1. `CALISTIR.bat` / `UYGULAMA.bat` — pencere açılır, **Başlat**
+2. Kamera testi: `TEST_KAMERA.bat`
+3. Yeniden kurulum: `KUR.bat`
 
 Sanal ortam ve model önbellekleri proje klasöründe tutulur; GitHub'a gönderilmez.
