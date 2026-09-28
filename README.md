@@ -1,6 +1,10 @@
 # Plaka Okuma — Akıllı Kantar
 
-## Operatör ekranı · v1.2
+## Operatör ekranı · v1.3
+- Referans tasarıma uygun yuvarlatılmış paneller, üst menü ve büyük tartım tipografisi.
+- Plaka, tartım ve irsaliye için gerçek verilere bağlı üç aşamalı durum göstergesi.
+- Raporlar menüsünden tüm kayıtların özeti ve CSV dışa aktarma.
+- Kamera önizlemelerinin JPEG kaydı düzeltildi; canlı kareler ana ekranda görünür.
 - İki kamera önizlemesi, büyük plaka ve anlık tartım göstergesi.
 - Sağ panelde geçiş kontrolü, kantar bağlantısı ve e-irsaliye eşleştirme.
 - Tam genişlikte araç kayıtları, filtreler ve yatay kaydırma.
@@ -13,7 +17,10 @@ Başlatma dosyaları kendi klasörünü kullanır; proje belirli bir sürücüye
 Python 3.12 ile kurulup doğrulanmıştır. İlk kurulum için `KUR.bat` çalıştırın.
 
 ### Doğrulama
-`python -m unittest test_scale_auto test_visits test_occupancy test_ocr_deadline test_irsaliye_plates test_ui`
+`python -m unittest test_scale_auto test_visits test_occupancy test_ocr_deadline test_irsaliye_plates test_ui test_watch_preview`
+
+Önceki sürümden güncellerken `KUR.bat` ile yeni CustomTkinter bağımlılığını yükleyin,
+ardından uygulamayı yeniden açın. Örnek araçlar veya sahte kamera görüntüleri canlı arayüze eklenmez.
 
 Ekran testleri Tk ve açık masaüstü gerektirir. Gerçek kamera, kantar ve e-irsaliye
 entegrasyonları tesis ağı ve ilgili yerel yapılandırmalar ile ayrıca doğrulanmalıdır.

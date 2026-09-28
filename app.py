@@ -26,6 +26,7 @@ import tkinter as tk
 from tkinter import font as tkfont
 from tkinter import messagebox
 from tkinter import ttk
+import operator_ui
 
 OUT_DIR = ROOT / "live_ocr"
 CAMS = (
@@ -33,15 +34,15 @@ CAMS = (
     ("165", "Çıkış", "Plaka"),
 )
 
-BG = "#0B1220"
-HEADER = "#0E1624"
-PANEL = "#121C2C"
-PANEL2 = "#172234"
-EDGE = "#243044"
+BG = operator_ui.BG
+HEADER = operator_ui.HEADER
+PANEL = operator_ui.PANEL
+PANEL2 = "#162D40"
+EDGE = operator_ui.EDGE
 GOLD = "#C9A227"
-CYAN = "#38BDF8"
+CYAN = operator_ui.CYAN
 TEXT = "#F1F5F9"
-MUTED = "#8B9BB0"
+MUTED = operator_ui.MUTED
 GREEN = "#34D399"
 ORANGE = "#F59E0B"
 RED = "#F87171"
@@ -54,7 +55,7 @@ FOOT = "#0A1018"
 
 APP_NAME = "Akıllı Kantar"
 SITE_NAME = "Bursa Çimento"
-VERSION = "1.2"
+VERSION = "1.3"
 
 STATUS_TR = {
     "WAITING_ENTRY_WEIGHT": "AĞIRLIK BEKLENİYOR",
@@ -323,32 +324,8 @@ class App(tk.Tk):
         self.after(800, self._refresh_visits_tick)
 
     def _build(self) -> None:
-        self.font_tiny = tkfont.Font(family="Segoe UI", size=9)
-        self.font_sec = tkfont.Font(family="Segoe UI", size=10, weight="bold")
-        self.font_small = tkfont.Font(family="Segoe UI", size=10)
-        self.font_kpi = tkfont.Font(family="Segoe UI", size=20, weight="bold")
-        self.font_plate = tkfont.Font(family="Bahnschrift", size=32, weight="bold")
-        try:
-            self.font_plate.actual()
-        except Exception:
-            self.font_plate = tkfont.Font(family="Segoe UI", size=36, weight="bold")
-
-        self._style_ttk()
-        tk.Frame(self, bg=GOLD, height=2).pack(fill="x")
-        self._header()
-        self._stats()
-        self._footer()
-        self.workspace = tk.Frame(self, bg=BG)
-        self.workspace.pack(fill="x", padx=20, pady=(10, 8))
-        self.workspace.columnconfigure(0, weight=7, uniform="work")
-        self.workspace.columnconfigure(1, weight=3, uniform="work")
-        self.operation = tk.Frame(self.workspace, bg=BG)
-        self.operation.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
-        self.side_panel = self._card(self.workspace)
-        self.side_panel.master.grid(row=0, column=1, sticky="nsew")
-        self._lanes()
-        self._hero()
-        self._body()
+        operator_ui.build(self)
+        self.gate_title.trace_add("write", lambda *args: operator_ui.gate_style(self))
 
     def _style_ttk(self) -> None:
         style = ttk.Style(self)
@@ -359,15 +336,15 @@ class App(tk.Tk):
             foreground=TEXT,
             fieldbackground=PANEL,
             borderwidth=0,
-            rowheight=32,
-            font=("Segoe UI", 10),
+            rowheight=34,
+            font=("Segoe UI", -14),
         )
         style.configure(
             "Treeview.Heading",
             background=PANEL2,
             foreground=MUTED,
             relief="flat",
-            font=("Segoe UI", 8, "bold"),
+            font=("Segoe UI", -12, "bold"),
             padding=(8, 8),
         )
         style.map(
@@ -386,352 +363,25 @@ class App(tk.Tk):
         style.layout("Treeview", [("Treeview.treearea", {"sticky": "nswe"})])
 
     def _card(self, parent, **pack) -> tk.Frame:
-        outer = tk.Frame(parent, bg=EDGE, bd=0)
-        inner = tk.Frame(outer, bg=PANEL)
-        inner.pack(fill="both", expand=True, padx=1, pady=1)
-        if pack:
-            outer.pack(**pack)
-        return inner
-
-    def _header(self) -> None:
-        bar = tk.Frame(self, bg=HEADER)
-        bar.pack(fill="x")
-        left = tk.Frame(bar, bg=HEADER)
-        left.pack(side="left", padx=20, pady=12)
-        mark = tk.Frame(left, bg=GOLD, width=32, height=32)
-        mark.pack(side="left", padx=(0, 10))
-        mark.pack_propagate(False)
-        tk.Label(mark, text="BC", font=("Segoe UI", 9, "bold"), fg=HEADER, bg=GOLD).place(
-            relx=0.5, rely=0.5, anchor="center"
-        )
-        titles = tk.Frame(left, bg=HEADER)
-        titles.pack(side="left")
-        tk.Label(
-            titles, text=SITE_NAME.upper(), font=("Segoe UI", 8, "bold"), fg=GOLD, bg=HEADER
-        ).pack(anchor="w")
-        tk.Label(
-            titles, text=APP_NAME, font=("Segoe UI", 16, "bold"), fg=TEXT, bg=HEADER
-        ).pack(anchor="w")
-
-        right = tk.Frame(bar, bg=HEADER)
-        right.pack(side="right", padx=16)
-        self.live_dot = tk.Label(right, text="●", font=("Segoe UI", 10), fg=MUTED, bg=HEADER)
-        self.live_dot.pack(side="left")
-        self.live_var = tk.StringVar(value="  DURDURULDU")
-        tk.Label(right, textvariable=self.live_var, font=self.font_sec, fg=TEXT, bg=HEADER).pack(
-            side="left", padx=(0, 14)
-        )
-        self.clock_var = tk.StringVar(value="")
-        tk.Label(
-            right, textvariable=self.clock_var, font=("Consolas", 12), fg=TEXT, bg=HEADER
-        ).pack(side="left", padx=(0, 14))
-        self.btn_start = self._btn(right, "Başlat", self._start, "primary")
-        self.btn_stop = self._btn(right, "Durdur", self._stop, "danger")
-        self._btn(right, "Kayıtlar", lambda: _open_path(OUT_DIR), "ghost")
-        self._btn(right, "İrsaliye", lambda: _open_path(ROOT / "irsaliye"), "ghost")
-        self.btn_stop.configure(state="disabled")
-        tk.Frame(self, bg=EDGE, height=1).pack(fill="x")
-
-    def _stats(self) -> None:
-        row = tk.Frame(self, bg=HEADER)
-        row.pack(fill="x")
-        self.stat_read = tk.StringVar(value="00")
-        self.stat_match = tk.StringVar(value="00")
-        self.stat_cam = tk.StringVar(value="0 / 2")
-        self.stat_kg = tk.StringVar(value="— kg")
-        for title, var in (("Kameralar", self.stat_cam), ("Okunan plaka", self.stat_read),
-                           ("İrsaliye eşleşmesi", self.stat_match)):
-            tk.Label(row, text=title, bg=HEADER, fg=MUTED, font=self.font_small).pack(
-                side="left", padx=(20, 8), pady=10)
-            tk.Label(row, textvariable=var, bg=HEADER, fg=TEXT,
-                     font=("Segoe UI", 10, "bold")).pack(side="left", padx=(0, 20))
-        tk.Label(row, text="CANLI OPERASYON", bg=HEADER, fg=CYAN,
-                 font=self.font_sec).pack(side="right", padx=20)
-
-    def _kpi(self, parent, value: str, label: str, wide: bool = False, last: bool = False) -> tk.StringVar:
-        shell = tk.Frame(parent, bg=EDGE)
-        shell.pack(side="left", fill="x", expand=True, padx=(0, 0 if last else 8))
-        tk.Frame(shell, bg=CYAN, width=3).pack(side="left", fill="y")
-        card = tk.Frame(shell, bg=PANEL)
-        card.pack(fill="both", expand=True, padx=(0, 1), pady=1)
-        tk.Label(card, text=label.upper(), font=self.font_tiny, fg=MUTED, bg=PANEL).pack(
-            anchor="w", padx=14, pady=(10, 0)
-        )
-        var = tk.StringVar(value=value)
-        tk.Label(
-            card,
-            textvariable=var,
-            font=self.font_kpi if not wide else ("Segoe UI", 15, "bold"),
-            fg=TEXT,
-            bg=PANEL,
-        ).pack(anchor="w", padx=14, pady=(0, 12))
-        return var
-
-    def _lanes(self) -> None:
-        row = tk.Frame(self.operation, bg=BG)
-        row.pack(fill="x", pady=(0, 12))
-        for i, (cid, lane, role) in enumerate(CAMS):
-            row.columnconfigure(i, weight=1, uniform="camera")
-            card = self._card(row)
-            card.master.grid(row=0, column=i, sticky="nsew", padx=(0 if i == 0 else 10, 0))
-            top = tk.Frame(card, bg=PANEL)
-            top.pack(fill="x", padx=12, pady=10)
-            tk.Label(top, text=f"{lane} kamerası", bg=PANEL, fg=TEXT,
-                     font=("Segoe UI", 11, "bold")).pack(side="left")
-            tk.Label(top, text=f"  CAM {cid}", bg=PANEL, fg=MUTED,
-                     font=self.font_tiny).pack(side="left")
-            self._btn(top, "Büyüt", lambda c=cid: self._open_watch(c), "ghost").pack_configure(side="right")
-            viewport = tk.Frame(card, bg=FOOT, height=180)
-            viewport.pack(fill="x", padx=8)
-            viewport.pack_propagate(False)
-            prev = tk.Label(viewport, text="Kamera görüntüsü bekleniyor\nİzlemeyi başlatın",
-                            fg=MUTED, bg=FOOT, font=self.font_small)
-            prev.pack(fill="both", expand=True)
-            self.cam_preview[cid] = prev
-            status = tk.Frame(card, bg=PANEL)
-            status.pack(fill="x", padx=12, pady=4)
-            dot = tk.Label(status, text="●", fg=MUTED, bg=PANEL)
-            dot.pack(side="left")
-            label = tk.Label(status, text=" Başlatılmadı", fg=MUTED, bg=PANEL, font=self.font_tiny)
-            label.pack(side="left")
-            self.cam_dot[cid] = dot
-            self.cam_state[cid] = label
-
-    def _hero(self) -> None:
-        wrap = tk.Frame(self.operation, bg=BG)
-        wrap.pack(fill="both", expand=True)
-
-        left = self._card(wrap, fill="both", expand=True)
-        tk.Label(left, text="AKTİF ARAÇ", font=self.font_sec, fg=MUTED, bg=PANEL).pack(
-            anchor="w", padx=18, pady=(14, 8)
-        )
-        identity = tk.Frame(left, bg=PANEL)
-        identity.pack(fill="x", padx=18, pady=(0, 8))
-        plate = tk.Frame(identity, bg="#1A1A1A", highlightthickness=2, highlightbackground="#3A3A3A")
-        plate.pack(side="left")
-        tr = tk.Frame(plate, bg=TR_BLUE, width=56)
-        tr.pack(side="left", fill="y")
-        tr.pack_propagate(False)
-        tk.Label(tr, text="TR", font=("Segoe UI", 11, "bold"), fg="white", bg=TR_BLUE).pack(
-            expand=True
-        )
-        body = tk.Frame(plate, bg=PLATE_BG)
-        body.pack(side="left", fill="both", expand=True)
-        self.plate_var = tk.StringVar(value="—  —  —")
-        self.plate_lbl = tk.Label(
-            body,
-            textvariable=self.plate_var,
-            font=self.font_plate,
-            fg=PLATE_FG,
-            bg=PLATE_BG,
-            padx=28,
-            pady=10,
-        )
-        self.plate_lbl.pack()
-        weight = tk.Frame(identity, bg=PANEL)
-        weight.pack(side="right", padx=(12, 0))
-        tk.Label(weight, text="ANLIK TARTIM", font=self.font_sec, fg=MUTED, bg=PANEL).pack(anchor="e")
-        tk.Label(weight, textvariable=self.stat_kg, font=("Segoe UI", 32, "bold"),
-                 fg=TEXT, bg=PANEL).pack(anchor="e")
-        self.meta_var = tk.StringVar(value="Başlat’a basınca kameralar izlenir")
-        tk.Label(
-            left, textvariable=self.meta_var, font=self.font_small, fg=MUTED, bg=PANEL
-        ).pack(anchor="w", padx=18, pady=(0, 2))
-        self.weight_var = tk.StringVar(value="Anlık: —")
-        facts = tk.Frame(left, bg=PANEL)
-        facts.pack(fill="x", padx=18, pady=(0, 12))
-        self.act_full = tk.StringVar(value="—")
-        self.act_empty = tk.StringVar(value="—")
-        self.act_net = tk.StringVar(value="—")
-        self.act_irs = tk.StringVar(value="—")
-        for i, (lab, var) in enumerate(
-            (
-                ("DOLU", self.act_full),
-                ("BOŞ", self.act_empty),
-                ("NET", self.act_net),
-                ("İRSALİYE", self.act_irs),
-            )
-        ):
-            facts.columnconfigure(i, weight=1, uniform="weight")
-            tk.Label(facts, text=lab, font=self.font_tiny, fg=MUTED, bg=PANEL).grid(
-                row=0, column=i, sticky="w", padx=(0 if i == 0 else 12, 8)
-            )
-            tk.Label(
-                facts, textvariable=var, font=("Segoe UI", 15, "bold"), fg=TEXT, bg=PANEL
-            ).grid(row=1, column=i, sticky="w", padx=(0 if i == 0 else 12, 8))
-
-        lamp = tk.Frame(self.side_panel, bg=PANEL)
-        lamp.pack(fill="x")
-        tk.Label(lamp, text="GEÇİŞ KONTROLÜ", font=self.font_sec, fg=MUTED, bg=PANEL).pack(
-            anchor="w", padx=16, pady=(14, 4)
-        )
-        self.gate_title = tk.StringVar(value="🟡 BEKLEYİN")
-        self.gate_lbl = tk.Label(
-            lamp,
-            textvariable=self.gate_title,
-            font=("Segoe UI", 16, "bold"),
-            fg=YELLOW,
-            bg=PANEL,
-            wraplength=350,
-            justify="left",
-        )
-        self.gate_lbl.pack(anchor="w", padx=16, pady=(8, 4))
-        self.gate_sub = tk.StringVar(value="Plaka bekleniyor")
-        tk.Label(
-            lamp,
-            textvariable=self.gate_sub,
-            font=self.font_small,
-            fg=MUTED,
-            bg=PANEL,
-            wraplength=350,
-            justify="left",
-        ).pack(anchor="w", padx=16, pady=(0, 10))
-        tk.Frame(lamp, bg=EDGE, height=1).pack(fill="x", padx=16, pady=4)
-
-        self.scale_link = tk.StringVar(value="BAĞLANTI  ·  —")
-        self.scale_now = tk.StringVar(value="ANLIK  ·  —")
-        self.scale_st = tk.StringVar(value="DURUM  ·  —")
-        for var in (self.scale_link,):
-            tk.Label(
-                lamp, textvariable=var, font=self.font_small, fg=TEXT, bg=PANEL, anchor="w"
-            ).pack(anchor="w", padx=16, pady=1)
-        self.scale_dbg = tk.StringVar(value="")
-        self.scale_dbg_lbl = tk.Label(
-            lamp,
-            textvariable=self.scale_dbg,
-            font=("Consolas", 8),
-            fg=MUTED,
-            bg=PANEL,
-            justify="left",
-            anchor="nw",
-            wraplength=350,
-        )
-
-
-        right = tk.Frame(self.side_panel, bg=PANEL)
-        right.pack(fill="both", expand=True)
-        head = tk.Frame(right, bg=PANEL)
-        head.pack(fill="x", padx=18, pady=(8, 4))
-        tk.Label(head, text="E-İRSALİYE", font=self.font_sec, fg=MUTED, bg=PANEL).pack(side="left")
-        self.irs_badge = tk.Label(
-            head, text="  E-BELGE  ", font=self.font_tiny, fg=HEADER, bg=CYAN
-        )
-        self.irs_badge.pack(side="right")
-        self.irs_status = tk.StringVar(value="Araç bekleniyor")
-        self.irs_id = tk.StringVar(value="—")
-        self.irs_customer = tk.StringVar(value="—")
-        self.irs_driver = tk.StringVar(value="—")
-        self.irs_date = tk.StringVar(value="—")
-        self.irs_goods = tk.StringVar(value="—")
-        self.irs_var = tk.StringVar(value="Gelen belgeler Digital Planet üzerinden otomatik iner")
-        grid = tk.Frame(right, bg=PANEL)
-        grid.pack(fill="x", padx=18, pady=(0, 6))
-        for i, (key, var) in enumerate(
-            (
-                ("Durum", self.irs_status),
-                ("Belge", self.irs_id),
-                ("Cari", self.irs_customer),
-                ("Sürücü", self.irs_driver),
-                ("Tarih", self.irs_date),
-                ("Mal", self.irs_goods),
-            )
-        ):
-            tk.Label(
-                grid, text=key, font=self.font_tiny, fg=MUTED, bg=PANEL, width=8, anchor="w"
-            ).grid(row=i, column=0, sticky="nw", pady=0)
-            tk.Label(
-                grid,
-                textvariable=var,
-                font=self.font_small,
-                fg=TEXT,
-                bg=PANEL,
-                anchor="w",
-                justify="left",
-                wraplength=250,
-            ).grid(row=i, column=1, sticky="w", pady=0)
-        tk.Label(
-            right, text="BU PLAKADAKİ İRSALİYELER", font=self.font_tiny, fg=MUTED, bg=PANEL
-        ).pack(anchor="w", padx=18, pady=(4, 2))
-        self.irs_list = tk.Listbox(
-            right,
-            height=1,
-            bg=PANEL2,
-            fg=TEXT,
-            selectbackground=CYAN,
-            selectforeground=HEADER,
-            relief="flat",
-            highlightthickness=0,
-            font=self.font_tiny,
-            activestyle="none",
-        )
-        self.irs_list.pack(fill="x", padx=18, pady=(0, 6))
-        self.irs_list.bind("<<ListboxSelect>>", self._on_irs_pick)
-        self.irs_list.bind("<Double-1>", lambda _e: self._take_irs())
-        btnrow = tk.Frame(right, bg=PANEL)
-        btnrow.pack(fill="x", padx=18, pady=(0, 8))
-        self.btn_irs_take = self._btn(btnrow, "İrsaliyeyi eşleştir", self._take_irs, "primary")
-        self.btn_irs_open = self._btn(btnrow, "Belgeyi aç", self._open_current_irs, "ghost")
-        self.btn_irs_take.configure(state="disabled")
-        self.btn_irs_open.configure(state="disabled")
-        manual_button = self._btn(right, "Elle irsaliye gir", self._show_manual_irs, "ghost")
-        manual_button.pack_configure(side="top", anchor="w", padx=18, pady=(0, 8))
-        self.manual_window = tk.Toplevel(self)
-        self.manual_window.title("Elle irsaliye eşleştir")
-        self.manual_window.geometry("520x180")
-        self.manual_window.configure(bg=PANEL)
-        self.manual_window.protocol("WM_DELETE_WINDOW", self.manual_window.withdraw)
-        self.manual_window.withdraw()
-        man = tk.Frame(self.manual_window, bg=PANEL)
-        man.pack(fill="x", padx=18, pady=18)
-        tk.Label(
-            man,
-            text="BULUNAMAZSA ELLE İRSALİYE NO",
-            font=self.font_tiny,
-            fg=MUTED,
-            bg=PANEL,
-        ).pack(anchor="w")
-        man_row = tk.Frame(man, bg=PANEL)
-        man_row.pack(fill="x", pady=(4, 0))
-        self.irs_manual = tk.Entry(
-            man_row,
-            bg=PANEL2,
-            fg=TEXT,
-            insertbackground=TEXT,
-            relief="flat",
-            font=self.font_small,
-            highlightthickness=1,
-            highlightbackground=EDGE,
-            highlightcolor=CYAN,
-        )
-        self.irs_manual.pack(side="left", fill="x", expand=True, ipady=6, padx=(0, 8))
-        self.irs_manual.bind("<Return>", lambda _e: self._save_manual_irs())
-        self.btn_irs_save = self._btn(man_row, "Kaydet", self._save_manual_irs, "ghost")
-        tk.Label(
-            self.manual_window,
-            textvariable=self.irs_var,
-            font=self.font_tiny,
-            fg=MUTED,
-            bg=PANEL,
-            wraplength=420,
-            justify="left",
-        ).pack(anchor="w", padx=18, pady=(4, 6))
+        return operator_ui.card(parent, **pack)
 
     def _body(self) -> None:
         mid = tk.Frame(self, bg=BG)
+        self.records_panel = mid
         mid.pack(fill="both", expand=True, padx=20, pady=(4, 8))
         left = tk.Frame(mid, bg=BG)
         left.pack(fill="both", expand=True)
-        tk.Label(left, text="SON ARAÇ HAREKETLERİ", font=self.font_sec, fg=MUTED, bg=BG).pack(
-            anchor="w", pady=(0, 6)
-        )
         filt = tk.Frame(left, bg=BG)
-        filt.pack(fill="x", pady=(0, 6))
+        filt.pack(fill="x", pady=(0, 10))
+        tk.Label(filt, text="Son araç hareketleri", font=("Segoe UI", -20, "bold"), fg=TEXT, bg=BG).pack(
+            side="left", padx=(0, 20)
+        )
         for key, lab in (
             ("all", "Tümü"),
             ("facility", "Tesiste"),
             ("done", "Tamamlandı"),
-            ("review", "Müdahale Gerekli"),
-            ("irs", "İrsaliye Bekliyor"),
+            ("review", "Müdahale"),
+            ("irs", "İrsaliye bekliyor"),
         ):
             b = tk.Button(
                 filt,
@@ -742,18 +392,18 @@ class App(tk.Tk):
                 relief="flat",
                 padx=10,
                 pady=4,
-                font=("Segoe UI", 8, "bold"),
+                font=("Segoe UI", -12, "bold"),
                 cursor="hand2",
                 bd=0,
             )
             b.pack(side="left", padx=(0, 6))
             self._filter_btns[key] = b
-        tk.Label(filt, text="Plaka ara", font=self.font_tiny, fg=MUTED, bg=BG).pack(
-            side="left", padx=(12, 6)
-        )
+        search_box = tk.Frame(filt, bg=BG)
+        search_box.pack(side="right")
+        tk.Label(search_box, text="Plaka / irsaliye", font=self.font_tiny, fg=MUTED, bg=BG).pack(side="left", padx=(8, 6))
         self.search_var = tk.StringVar()
         search = tk.Entry(
-            filt,
+            search_box,
             textvariable=self.search_var,
             bg=PANEL2,
             fg=TEXT,
@@ -798,10 +448,10 @@ class App(tk.Tk):
         horizontal = ttk.Scrollbar(tree_wrap, orient="horizontal", command=self.tree.xview)
         horizontal.grid(row=1, column=0, sticky="ew")
         self.tree.configure(xscrollcommand=horizontal.set)
-        self.tree.tag_configure("odd", background="#101A28")
-        self.tree.tag_configure("even", background="#0E1622")
-        self.tree.tag_configure("hit", foreground=GREEN)
-        self.tree.tag_configure("miss", foreground=YELLOW)
+        self.tree.tag_configure("odd", background="#102436")
+        self.tree.tag_configure("even", background=PANEL)
+        self.tree.tag_configure("hit", foreground=TEXT)
+        self.tree.tag_configure("miss", foreground=TEXT)
         self.tree.tag_configure("review", foreground=RED)
         self.tree.tag_configure("done", foreground=GREEN)
         self.tree.tag_configure("wait", foreground=YELLOW)
@@ -900,39 +550,37 @@ class App(tk.Tk):
         self.manual_window.lift()
         self.irs_manual.focus_set()
 
-    def _btn(self, parent, text, cmd, kind: str) -> tk.Button:
-        palettes = {
-            "primary": (HEADER, CYAN, "#7DD3FC"),
-            "danger": ("#FEE2E2", "#7F1D1D", "#991B1B"),
-            "ghost": (TEXT, "#1A2536", "#243044"),
-        }
-        fg, bg, hover = palettes[kind]
-        b = tk.Button(
-            parent,
-            text=text,
-            command=cmd,
-            fg=fg,
-            bg=bg,
-            activeforeground=fg,
-            activebackground=hover,
-            relief="flat",
-            padx=14,
-            pady=6,
-            font=("Segoe UI", 9, "bold"),
-            cursor="hand2",
-            bd=0,
-            highlightthickness=0,
-        )
-        b.pack(side="left", padx=3)
-        b.bind(
-            "<Enter>",
-            lambda _e, btn=b, h=hover: btn.configure(bg=h) if str(btn["state"]) != "disabled" else None,
-        )
-        b.bind(
-            "<Leave>",
-            lambda _e, btn=b, r=bg: btn.configure(bg=r) if str(btn["state"]) != "disabled" else None,
-        )
-        return b
+    def _btn(self, parent, text, cmd, kind: str):
+        return operator_ui.button(parent, text, cmd, kind)
+
+    def _show_reports(self) -> None:
+        import csv
+        from tkinter import filedialog
+
+        records = list(self._store().all_visits())
+        win = tk.Toplevel(self)
+        win.title("Araç raporları")
+        win.geometry("560x300")
+        win.configure(bg=PANEL)
+        completed = [v for v in records if v.get("status") == "COMPLETED"]
+        total = sum(float(v.get("net_weight") or 0) for v in completed)
+        for line in ("Tüm kayıtların özeti", f"Toplam araç kaydı: {len(records)}",
+                     f"Tamamlanan: {len(completed)}", f"Tamamlanan net ağırlık: {_fmt_kg(total)}"):
+            operator_ui.label(win, line, 18).pack(anchor="w", padx=24, pady=12)
+
+        def export():
+            path = filedialog.asksaveasfilename(parent=win, defaultextension=".csv",
+                initialfile="kantar-raporu.csv", filetypes=[("CSV", "*.csv")])
+            if not path:
+                return
+            with open(path, "w", encoding="utf-8-sig", newline="") as stream:
+                writer = csv.writer(stream, delimiter=";")
+                writer.writerow(("Plaka", "İrsaliye", "Durum", "Dolu", "Boş", "Net", "Giriş", "Çıkış"))
+                for record in records:
+                    values = self._row_values(record)
+                    writer.writerow("'" + str(value) if str(value).startswith(("=", "+", "-", "@")) else value for value in values)
+            messagebox.showinfo("Rapor", "CSV raporu kaydedildi.", parent=win)
+        self._btn(win, "CSV olarak kaydet", export, "primary").pack_configure(padx=24)
 
     def _tick_clock(self) -> None:
         self.clock_var.set(datetime.now().strftime("%d.%m.%Y   %H:%M:%S"))
@@ -1314,6 +962,7 @@ class App(tk.Tk):
         self._paint_scale()
 
     def _paint_gate(self, visit: dict | None) -> None:
+        operator_ui.refresh_steps(self, visit)
         auto = str(self._scale.get("auto_state") or "")
         if not self.running:
             self.gate_title.set("SİSTEM DURDURULDU")

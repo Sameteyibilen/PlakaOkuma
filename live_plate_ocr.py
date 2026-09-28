@@ -1789,8 +1789,10 @@ def write_watch(
             (0, 255, 0) if occupied else (180, 180, 180),
             2,
         )
-        tmp = OUT_DIR / f"watch_{cid}.jpg.tmp"
-        cv2.imwrite(str(tmp), vis, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
+        OUT_DIR.mkdir(parents=True, exist_ok=True)
+        tmp = OUT_DIR / f"watch_{cid}.tmp.jpg"
+        if not cv2.imwrite(str(tmp), vis, [int(cv2.IMWRITE_JPEG_QUALITY), 70]):
+            return
         tmp.replace(OUT_DIR / f"watch_{cid}.jpg")
     except Exception:
         pass

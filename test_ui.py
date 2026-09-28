@@ -1,5 +1,6 @@
 """Desktop layout and truthful connection-state regression checks (requires Tk)."""
 import unittest
+import operator_ui
 from app import App
 
 
@@ -23,6 +24,24 @@ class DesktopTests(unittest.TestCase):
                 self.assertLessEqual(widget.winfo_rooty() + widget.winfo_height(),
                                      self.app.winfo_rooty() + self.app.winfo_height())
             self.assertGreater(self.app.tree.winfo_height(), 65)
+
+    def test_populated_layout_and_status_steps(self):
+        self.app.running = True
+        self.app._scale.update(ok=True, kg=32480, seated=True, auto_state="SCALE_EMPTY")
+        self.app.plate_var.set("16 ABC 123")
+        self.app.stat_kg.set("32.480 kg")
+        visit = {"plate": "16 ABC 123", "full_weight": 32480, "irsaliye_no": "IRS20260001482", "gate": "READY_TO_PASS"}
+        self.app._paint_gate(visit)
+        self.assertTrue(all("✓" in item.cget("text") for item in self.app.step_labels))
+        self.assertEqual(self.app.gate_box.cget("fg_color"), "#10372F")
+        for width, height in ((1280, 900), (1600, 1000)):
+            self.app.geometry(f"{width}x{height}")
+            self.app.update_idletasks()
+            operator_ui.resize(self.app)
+            self.app.update_idletasks()
+            self.assertGreaterEqual(self.app.weight_label.winfo_rootx(),
+                self.app.plate_lbl.winfo_rootx() + self.app.plate_lbl.winfo_width())
+            self.assertGreater(self.app.cam_preview["153"].winfo_height(), 120)
 
     def test_gate_requires_live_connection(self):
         self.app._paint_gate(None)
