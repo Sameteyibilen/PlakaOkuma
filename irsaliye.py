@@ -638,6 +638,7 @@ class IrsaliyeIndex:
         self.by_official: dict[str, list[dict]] = {}
         self.docs: list[dict] = []
         self._stamp: tuple = ()
+        self.generation = 0
         self._lock = threading.RLock()
 
     def _files(self) -> list[Path]:
@@ -679,11 +680,13 @@ class IrsaliyeIndex:
             self.docs = docs
             self.by_plate = by_plate
             self.by_official = by_official
+            self.generation += 1
             return len(docs)
 
-    def lookup_all(self, plate: str, *, official: bool = True) -> list[dict]:
+    def lookup_all(self, plate: str, *, official: bool = True, refresh: bool = True) -> list[dict]:
         """Getir: resmi plaka. official=False nottaki plakayı da tarar."""
-        self.refresh()
+        if refresh:
+            self.refresh()
         key = plate_key(plate)
         if not key:
             return []
@@ -756,21 +759,33 @@ class IrsaliyeIndex:
             encoding="utf-8",
         )
 
-    def today_docs(self, plate: str) -> list[dict]:
+    def today_docs(self, plate: str, *, refresh: bool = True) -> list[dict]:
         today = date.today().isoformat()
-        return [h for h in self.lookup_all(plate) if str(h.get("date") or "")[:10] == today]
+        return [
+            h
+            for h in self.lookup_all(plate, refresh=refresh)
+            if str(h.get("date") or "")[:10] == today
+        ]
 
-    def docs_on_date(self, plate: str, day: date | None = None) -> list[dict]:
+    def docs_on_date(
+        self, plate: str, day: date | None = None, *, refresh: bool = True
+    ) -> list[dict]:
         """Sadece o günün irsaliyesi — 14'teki belge bugün gelmez."""
         day_s = (day or date.today()).isoformat()
-        return [h for h in self.lookup_all(plate) if str(h.get("date") or "")[:10] == day_s]
+        return [
+            h
+            for h in self.lookup_all(plate, refresh=refresh)
+            if str(h.get("date") or "")[:10] == day_s
+        ]
 
-    def docs_for_when(self, plate: str, when: datetime | None = None) -> list[dict]:
+    def docs_for_when(
+        self, plate: str, when: datetime | None = None, *, refresh: bool = True
+    ) -> list[dict]:
         """Yalnızca bugünün irsaliyesi; tartımdan önceki en yakın saat üstte."""
         when = when or datetime.now()
         today = date.today()
         clock = when if when.date() == today else datetime.now()
-        return self.rank_by_time(self.docs_on_date(plate, today), clock)
+        return self.rank_by_time(self.docs_on_date(plate, today, refresh=refresh), clock)
 
     def rank_by_time(self, hits: list[dict], when: datetime | None) -> list[dict]:
         """Sadece tartımdan / çıkıştan ÖNCEki belgeler; en yakın üstte."""
@@ -793,8 +808,9 @@ class IrsaliyeIndex:
         before.sort(key=lambda x: x[0])
         return [r for _lag, r in before]
 
-    def find_by_id(self, doc_id: str) -> dict | None:
-        self.refresh()
+    def find_by_id(self, doc_id: str, *, refresh: bool = True) -> dict | None:
+        if refresh:
+            self.refresh()
         key = (doc_id or "").strip().upper().replace(" ", "")
         if not key:
             return None
@@ -805,9 +821,22 @@ class IrsaliyeIndex:
                 return public_record(rec)
         return None
 
-    def lookup(self, plate: str) -> dict | None:
-        hits = self.docs_for_when(plate)
+    def lookup(self, plate: str, *, refresh: bool = True) -> dict | None:
+        hits = self.docs_for_when(plate, refresh=refresh)
         return hits[0] if hits else None
+
+
+_SHARED: IrsaliyeIndex | None = None
+_SHARED_LOCK = threading.Lock()
+
+
+def shared_index() -> IrsaliyeIndex:
+    """Tek bellek indeksi — arayüz her seferinde XML taramaz."""
+    global _SHARED
+    with _SHARED_LOCK:
+        if _SHARED is None:
+            _SHARED = IrsaliyeIndex()
+        return _SHARED
 
 
 def import_xml(src: Path, dest_dir: Path | None = None) -> Path | None:

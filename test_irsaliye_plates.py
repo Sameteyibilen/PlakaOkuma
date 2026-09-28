@@ -174,6 +174,30 @@ class PlateXmlTests(unittest.TestCase):
         rec = parse_file(dest)
         self.assertEqual(rec["id"], "BRK2026000005999")
 
+    def test_ui_lookup_skips_disk_until_refresh(self) -> None:
+        from datetime import date, datetime
+
+        folder = Path(tempfile.mkdtemp())
+        today = date.today().isoformat()
+        xml = f"""<?xml version="1.0"?>
+<DespatchAdvice>
+  <ID>EIR-CACHE</ID>
+  <UUID>u-c</UUID>
+  <IssueDate>{today}</IssueDate>
+  <IssueTime>08:00:00</IssueTime>
+  <Shipment><TransportHandlingUnit><TransportEquipment><RoadTransport>
+    <LicensePlateID>16RAU55</LicensePlateID>
+  </RoadTransport></TransportEquipment></TransportHandlingUnit></Shipment>
+</DespatchAdvice>
+"""
+        (folder / "c.xml").write_text(xml, encoding="utf-8")
+        idx = IrsaliyeIndex(folder)
+        self.assertEqual(idx.docs_for_when("16RAU55", datetime.now(), refresh=False), [])
+        idx.refresh()
+        hits = idx.docs_for_when("16RAU55", datetime.now(), refresh=False)
+        self.assertEqual([h.get("id") for h in hits], ["EIR-CACHE"])
+        self.assertGreaterEqual(idx.generation, 1)
+
     def test_prune_deletes_old_keeps_today(self) -> None:
         from datetime import date, timedelta
 

@@ -281,6 +281,9 @@ class App(tk.Tk):
         self._irs_plate: str = ""
         self._irs_pick_id: str = ""
         self._irs_user_pick: bool = False
+        self._irs_fetching: bool = False
+        self._irs_sync_key: tuple | None = None
+        self._irs_pick_win: tk.Toplevel | None = None
         self._visit_browse: bool = False
         self._last_iid: str | None = None
         self._visit_cam: str = ""
@@ -319,6 +322,7 @@ class App(tk.Tk):
 
         self._build()
         self.after(120, self._poll)
+        self.after(200, self._schedule_irs_refresh)
         self.after(300, self._tick_clock)
         self.after(400, self._tick_watch)
         self.after(800, self._refresh_visits_tick)
@@ -422,21 +426,27 @@ class App(tk.Tk):
         tree_wrap = tk.Frame(table_card, bg=PANEL)
         tree_wrap.pack(fill="both", expand=True)
         self.tree = ttk.Treeview(
-            tree_wrap, columns=cols, show="headings", height=4, selectmode="browse"
+            tree_wrap, columns=cols, show="headings", height=8, selectmode="browse"
         )
         heads = {
-            "plaka": ("PLAKA", 118),
-            "irsaliye": ("İRSALİYE", 150),
-            "durum": ("DURUM", 160),
-            "dolu": ("DOLU", 80),
-            "bos": ("BOŞ", 80),
-            "net": ("NET", 80),
-            "giris": ("GİRİŞ", 64),
-            "cikis": ("ÇIKIŞ", 64),
+            "plaka": ("PLAKA", 150),
+            "irsaliye": ("İRSALİYE", 200),
+            "durum": ("DURUM", 220),
+            "dolu": ("DOLU", 100),
+            "bos": ("BOŞ", 100),
+            "net": ("NET", 100),
+            "giris": ("GİRİŞ", 90),
+            "cikis": ("ÇIKIŞ", 90),
         }
         for cid, (title, w) in heads.items():
             self.tree.heading(cid, text=title)
-            self.tree.column(cid, width=w, minwidth=52, anchor="center" if cid != "durum" else "w")
+            self.tree.column(
+                cid,
+                width=w,
+                minwidth=72,
+                stretch=True,
+                anchor="center" if cid != "durum" else "w",
+            )
         sb = ttk.Scrollbar(
             tree_wrap, orient="vertical", command=self.tree.yview, style="Dark.Vertical.TScrollbar"
         )
@@ -596,6 +606,12 @@ class App(tk.Tk):
         self.live_dot.configure(fg=color)
 
     def _append_log(self, text: str) -> None:
+        if threading.current_thread() is not threading.main_thread():
+            try:
+                self.after(0, lambda t=text: self._append_log(t))
+            except Exception:
+                pass
+            return
         raw = text.rstrip()
         low = raw.lower()
         tag = "info"
@@ -815,6 +831,21 @@ class App(tk.Tk):
         self._visit_query = (self.search_var.get() or "").strip()
         self._refresh_visits()
 
+    def _schedule_irs_refresh(self) -> None:
+        def work() -> None:
+            try:
+                from irsaliye import shared_index
+
+                shared_index().refresh()
+            except Exception:
+                pass
+            try:
+                self.after(15000, self._schedule_irs_refresh)
+            except Exception:
+                pass
+
+        threading.Thread(target=work, daemon=True, name="irs-index").start()
+
     def _refresh_visits_tick(self) -> None:
         self._refresh_visits()
         self._paint_active()
@@ -935,7 +966,8 @@ class App(tk.Tk):
                 and live not in {"—  —  —", "—"}
                 and _plates_same(live, vp) is False
             ):
-                self._sync_irs_panel({"plate": live})
+                if not self._irs_fetching:
+                    self._sync_irs_panel({"plate": live})
                 self._paint_gate(None)
                 return
             self.plate_var.set(vp or "—  —  —")
@@ -950,7 +982,8 @@ class App(tk.Tk):
             self.act_net.set(_fmt_kg(visit.get("net_weight")))
             irs = visit.get("irsaliye_no") or visit.get("irsaliye_id")
             self.act_irs.set(f"{irs} ✓" if irs else "BEKLENİYOR")
-            self._sync_irs_panel(visit)
+            if not self._irs_fetching:
+                self._sync_irs_panel(visit)
             self._paint_gate(visit)
         else:
             if not self.plate_var.get() or self.plate_var.get() == "—  —  —":
@@ -1323,18 +1356,32 @@ class App(tk.Tk):
         self._btn(row, "İptal", win.destroy, "ghost")
         ent.bind("<Return>", lambda _e: save())
 
+    def _irs_search_hits(
+        self, plate: str, when: datetime | None, *, refresh: bool = True
+    ) -> list[dict]:
+        from irsaliye import plate_matches_doc, shared_index
+
+        return [
+            h
+            for h in shared_index().docs_for_when(plate, when, refresh=refresh)
+            if plate_matches_doc(plate, h)
+        ]
+
     def _fetch_irs_for_row(self) -> None:
         visit = self._selected_visit()
         if not visit:
             return
-        self._active_visit_id = str(visit.get("visit_id") or "")
-        self._visit_cam = str(visit.get("entry_camera") or visit.get("exit_camera") or self._visit_cam)
-        self.plate_var.set(str(visit.get("plate") or ""))
-        self._paint_active(visit)
         plate = str(visit.get("plate") or "")
         if not plate or plate in {"—  —  —", "—", "TANIMSIZ"}:
             self._append_log("Getir: önce araç plakası gerekli.")
             return
+        if self._irs_fetching:
+            self.status_var.set("Getir zaten çalışıyor…")
+            return
+        self._irs_fetching = True
+        self._active_visit_id = str(visit.get("visit_id") or "")
+        self._visit_cam = str(visit.get("entry_camera") or visit.get("exit_camera") or self._visit_cam)
+        self.plate_var.set(plate)
         when = None
         try:
             raw = visit.get("exit_time") or visit.get("entry_time")
@@ -1342,60 +1389,103 @@ class App(tk.Tk):
                 when = datetime.fromisoformat(str(raw))
         except ValueError:
             when = None
+        self.status_var.set(f"Getir: {plate} aranıyor…")
+        self.irs_status.set("Aranıyor")
+        self.irs_badge.configure(text="  ARANIYOR  ", bg=YELLOW, fg=HEADER)
+        self.irs_var.set("Yerel ve Digital Planet taranıyor, pencere açık kalsın.")
+        self._irs_pick_dialog(visit, [])
+        visit_id = self._active_visit_id
+
+        def work() -> None:
+            err = ""
+            local: list[dict] = []
+            fresh: list[dict] = []
+            try:
+                local = self._irs_search_hits(plate, when)
+            except Exception as exc:
+                err = str(exc)
+
+            def show_local() -> None:
+                self._set_irsaliye({}, False, local)
+                self._refresh_irs_pick_dialog(visit, local)
+                self.status_var.set(
+                    f"Getir: yerelde {len(local)} belge — portal taranıyor…"
+                )
+
+            try:
+                self.after(0, show_local)
+            except Exception:
+                pass
+            try:
+                from eportal import load_config as load_eportal_config
+                from eportal import sync as sync_eportal
+
+                pcfg = load_eportal_config()
+                if pcfg.get("dp_login") and pcfg.get("dp_password") and pcfg.get("dp_corporate"):
+                    sync_eportal(log=None, cfg=pcfg)
+                fresh = self._irs_search_hits(plate, when)
+            except Exception as exc:
+                err = str(exc)
+                try:
+                    fresh = self._irs_search_hits(plate, when)
+                except Exception:
+                    fresh = local
+
+            def done() -> None:
+                self._irs_fetching = False
+                self._irs_sync_key = None
+                if err:
+                    self._append_log(f"Getir senkron: {err}")
+                self._append_log(f"Getir bitti: {plate} — {len(fresh)} belge")
+                self.status_var.set(f"Getir bitti: {len(fresh)} belge")
+                if self._active_visit_id == visit_id:
+                    self._set_irsaliye({}, False, fresh)
+                    self._refresh_irs_pick_dialog(visit, fresh)
+
+            try:
+                self.after(0, done)
+            except Exception:
+                self._irs_fetching = False
+
+        threading.Thread(target=work, daemon=True, name="irs-getir").start()
+
+    def _refresh_irs_pick_dialog(self, visit: dict, hits: list[dict]) -> None:
+        win = self._irs_pick_win
+        if win is None:
+            return
         try:
-            from eportal import load_config as load_eportal_config
-            from eportal import sync as sync_eportal
+            if not win.winfo_exists():
+                self._irs_pick_win = None
+                return
+        except Exception:
+            self._irs_pick_win = None
+            return
+        box = getattr(win, "_hits_box", None)
+        if box is None:
+            return
+        for child in box.winfo_children():
+            child.destroy()
+        self._fill_irs_pick_box(box, visit, hits, win)
 
-            pcfg = load_eportal_config()
-            if pcfg.get("dp_login") and pcfg.get("dp_password") and pcfg.get("dp_corporate"):
-                self._append_log(f"Getir: {plate} için Digital Planet taranıyor…")
-                sync_eportal(log=self._append_log, cfg=pcfg)
-        except Exception as exc:
-            self._append_log(f"Getir senkron: {exc}")
-        try:
-            from irsaliye import IrsaliyeIndex, plate_matches_doc
-
-            hits = [
-                h
-                for h in IrsaliyeIndex().docs_for_when(plate, when)
-                if plate_matches_doc(plate, h)
-            ]
-        except Exception as exc:
-            self._append_log(f"İrsaliye arama: {exc}")
-            hits = []
-        self._set_irsaliye({}, False, hits)
-        self._irs_pick_dialog(visit, hits)
-
-    def _irs_pick_dialog(self, visit: dict, hits: list[dict]) -> None:
-        win = tk.Toplevel(self)
-        win.title("İrsaliye seç")
-        win.configure(bg=PANEL)
-        win.geometry("560x520")
-        win.transient(self)
-        tk.Label(win, text="İRSALİYE SEÇ", font=self.font_sec, fg=MUTED, bg=PANEL).pack(
-            anchor="w", padx=16, pady=(14, 4)
-        )
-        tk.Label(
-            win,
-            text=f"Araç: {visit.get('plate')}    Zaman: {_fmt_clock(visit.get('entry_time') or visit.get('exit_time'))}",
-            font=self.font_small,
-            fg=TEXT,
-            bg=PANEL,
-        ).pack(anchor="w", padx=16, pady=(0, 8))
-        box = tk.Frame(win, bg=PANEL)
-        box.pack(fill="both", expand=True, padx=16)
-
+    def _fill_irs_pick_box(
+        self, box: tk.Frame, visit: dict, hits: list[dict], win: tk.Toplevel
+    ) -> None:
         def take(rec: dict) -> None:
             win.destroy()
+            self._irs_pick_win = None
             self._confirm_irs(rec, "secim")
 
         def open_pdf(rec: dict) -> None:
             self._open_irs_doc(rec)
 
         if not hits:
-            tk.Label(box, text="Bu plaka ve saate uygun irsaliye yok. Elle yazabilirsiniz.", fg=YELLOW, bg=PANEL).pack(
-                anchor="w"
+            msg = (
+                "İrsaliye aranıyor…"
+                if self._irs_fetching
+                else "Bu plaka ve saate uygun irsaliye yok. Elle yazabilirsiniz."
             )
+            tk.Label(box, text=msg, fg=YELLOW, bg=PANEL).pack(anchor="w")
+            return
         for rec in hits:
             row = tk.Frame(box, bg=PANEL2)
             row.pack(fill="x", pady=4)
@@ -1411,6 +1501,38 @@ class App(tk.Tk):
             ).pack(side="left", padx=8, pady=8)
             self._btn(row, "Al", lambda r=rec: take(r), "primary")
             self._btn(row, "PDF", lambda r=rec: open_pdf(r), "ghost")
+
+    def _irs_pick_dialog(self, visit: dict, hits: list[dict]) -> None:
+        old = self._irs_pick_win
+        if old is not None:
+            try:
+                if old.winfo_exists():
+                    self._refresh_irs_pick_dialog(visit, hits)
+                    old.lift()
+                    return
+            except Exception:
+                pass
+        win = tk.Toplevel(self)
+        self._irs_pick_win = win
+        win.title("İrsaliye seç")
+        win.configure(bg=PANEL)
+        win.geometry("560x520")
+        win.transient(self)
+        win.protocol("WM_DELETE_WINDOW", lambda: (setattr(self, "_irs_pick_win", None), win.destroy()))
+        tk.Label(win, text="İRSALİYE SEÇ", font=self.font_sec, fg=MUTED, bg=PANEL).pack(
+            anchor="w", padx=16, pady=(14, 4)
+        )
+        tk.Label(
+            win,
+            text=f"Araç: {visit.get('plate')}    Zaman: {_fmt_clock(visit.get('entry_time') or visit.get('exit_time'))}",
+            font=self.font_small,
+            fg=TEXT,
+            bg=PANEL,
+        ).pack(anchor="w", padx=16, pady=(0, 8))
+        box = tk.Frame(win, bg=PANEL)
+        box.pack(fill="both", expand=True, padx=16)
+        win._hits_box = box  # type: ignore[attr-defined]
+        self._fill_irs_pick_box(box, visit, hits, win)
         man = tk.Frame(win, bg=PANEL)
         man.pack(fill="x", padx=16, pady=12)
         tk.Label(man, text="ELLE İRSALİYE NO", font=self.font_tiny, fg=MUTED, bg=PANEL).pack(anchor="w")
@@ -1423,18 +1545,19 @@ class App(tk.Tk):
                 return
             rec = None
             try:
-                from irsaliye import IrsaliyeIndex
+                from irsaliye import shared_index
 
-                rec = IrsaliyeIndex().find_by_id(num)
+                rec = shared_index().find_by_id(num, refresh=False)
             except Exception as exc:
                 self._append_log(f"Elle irsaliye: {exc}")
             if rec is None:
                 rec = {"id": num, "summary": "Elle kaydedildi"}
+            self._irs_pick_win = None
             win.destroy()
             self._confirm_irs(rec, "elle")
 
         self._btn(man, "Kaydet", save_manual, "ghost")
-        self._btn(man, "Kapat", win.destroy, "ghost")
+        self._btn(man, "Kapat", lambda: (setattr(self, "_irs_pick_win", None), win.destroy()), "ghost")
 
     def _solve_review(self) -> None:
         visit = self._selected_visit()
@@ -1580,26 +1703,35 @@ class App(tk.Tk):
     def _open_irs_doc(self, irs: dict | None) -> None:
         if not irs:
             return
-        try:
-            from irsaliye import ensure_view
+        rec = dict(irs)
 
-            path = ensure_view(irs)
-            if path and path.exists():
-                _open_path(path)
-                return
-            self._append_log("PDF açılamadı — irsaliye kaydı duruyor")
-            messagebox.showwarning(
-                "PDF",
-                "Belge açılamadı. Seçilen irsaliye kaydı silinmedi.",
-                parent=self,
-            )
-        except Exception as exc:
-            self._append_log(f"PDF hata: {exc}")
-            messagebox.showwarning(
-                "PDF",
-                f"Belge açılamadı.\n{exc}\nİrsaliye ve visit kaydı duruyor.",
-                parent=self,
-            )
+        def work() -> None:
+            err = ""
+            path = None
+            try:
+                from irsaliye import ensure_view
+
+                path = ensure_view(rec)
+            except Exception as exc:
+                err = str(exc)
+
+            def done() -> None:
+                if path and path.exists():
+                    _open_path(path)
+                    return
+                self._append_log(f"PDF açılamadı — irsaliye kaydı duruyor{': ' + err if err else ''}")
+                messagebox.showwarning(
+                    "PDF",
+                    "Belge açılamadı. Seçilen irsaliye kaydı silinmedi.",
+                    parent=self,
+                )
+
+            try:
+                self.after(0, done)
+            except Exception:
+                pass
+
+        threading.Thread(target=work, daemon=True, name="irs-pdf").start()
 
     def _open_current_irs(self) -> None:
         self._open_irs_doc(self._irs_current)
@@ -1646,11 +1778,13 @@ class App(tk.Tk):
     def _irs_hits_for_plate(self, plate: str, visit: dict | None = None) -> list[dict]:
         if not plate or plate in {"—", "—  —  —", "TANIMSIZ"}:
             return []
-        from irsaliye import IrsaliyeIndex, plate_matches_doc
+        from irsaliye import plate_matches_doc, shared_index
 
         hits = [
             h
-            for h in IrsaliyeIndex().docs_for_when(plate, self._irs_when(visit))
+            for h in shared_index().docs_for_when(
+                plate, self._irs_when(visit), refresh=False
+            )
             if plate_matches_doc(plate, h)
         ]
         seen = {str(h.get("id") or "") for h in hits}
@@ -1712,10 +1846,17 @@ class App(tk.Tk):
         plate = str(visit.get("plate") or "")
         irs_id = str(visit.get("irsaliye_no") or visit.get("irsaliye_id") or "").strip()
         try:
-            from irsaliye import IrsaliyeIndex, plate_matches_doc
+            from irsaliye import plate_matches_doc, shared_index
         except Exception:
             if irs_id and str((self._irs_current or {}).get("id") or "") != irs_id:
                 self._apply_irs_list([{"id": irs_id}], select_id=irs_id, taken_id=irs_id)
+            return
+        try:
+            gen = shared_index().generation
+        except Exception:
+            gen = 0
+        sync_key = (plate, irs_id, gen)
+        if sync_key == self._irs_sync_key:
             return
         hits: list[dict] = []
         try:
@@ -1725,7 +1866,7 @@ class App(tk.Tk):
         if irs_id and not any(str(h.get("id") or "") == irs_id for h in hits):
             rec = None
             try:
-                rec = IrsaliyeIndex().find_by_id(irs_id)
+                rec = shared_index().find_by_id(irs_id, refresh=False)
             except Exception:
                 rec = None
             rec = rec or {"id": irs_id, "plate": plate}
@@ -1748,6 +1889,7 @@ class App(tk.Tk):
         cur_id = str((self._irs_current or {}).get("id") or "")
         old_ids = [str(m.get("id") or "") for m in self._irs_matches]
         new_ids = [str(h.get("id") or "") for h in hits]
+        self._irs_sync_key = sync_key
         if old_ids == new_ids and cur_id and (self._irs_user_pick or cur_id in new_ids):
             if irs_id and cur_id == irs_id:
                 self.irs_status.set("Alındı")
@@ -1899,7 +2041,7 @@ class App(tk.Tk):
             if not self._ask(f"{old_irs} irsaliyesi {irs_id} olarak değiştirilecek. Devam etmek istiyor musunuz?"):
                 return
         try:
-            from irsaliye import IrsaliyeIndex, save_choice
+            from irsaliye import save_choice, shared_index
 
             save_choice(
                 plate,
@@ -1909,7 +2051,7 @@ class App(tk.Tk):
                 extra={"visit_id": visit_id or ""},
             )
             if source == "secim":
-                IrsaliyeIndex()._mark_used(irs_id)
+                shared_index()._mark_used(irs_id)
             if visit_id or plate:
                 self._store().attach_irsaliye(
                     visit_id=visit_id,
@@ -1966,9 +2108,9 @@ class App(tk.Tk):
             return
         rec: dict | None = None
         try:
-            from irsaliye import IrsaliyeIndex
+            from irsaliye import shared_index
 
-            rec = IrsaliyeIndex().find_by_id(num)
+            rec = shared_index().find_by_id(num, refresh=False)
         except Exception:
             rec = None
         if rec is None:
@@ -2020,11 +2162,16 @@ class App(tk.Tk):
 
     def _poll(self) -> None:
         try:
+            logs = 0
             while True:
                 try:
                     kind, kw = self.q.get_nowait()
                 except queue.Empty:
                     break
+                if kind == "log":
+                    logs += 1
+                    if logs > 20:
+                        continue
                 try:
                     self._on_proc_event(kind, kw)
                 except Exception as exc:
